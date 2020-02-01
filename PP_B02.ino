@@ -50,17 +50,16 @@ boolean btr = 0; // 挑選要改變的變數
 boolean bc = 0;
 
 // ADC 讀取外部電壓
+int real_vol;
 boolean cad = 0;
 unsigned long start_time = 0;
 unsigned long finally_time = 0;
 unsigned long continued_time = 0;
 unsigned long continued_old_time = 0;
+unsigned long continued_temp_time = 0;
 
 // 紀錄過去的時間
 unsigned long record_time[8] = {0,0,0,0,0,0,0,0};
-
-// ADC debounce
-unsigned long debounce_time = 0;
 
 // 讓螢幕從星號位置開始顯示
 int lda = 0;
@@ -101,30 +100,26 @@ void lcd_sign(int);
 
 //主程式運作區
 void loop() {
+  real_vol = analogRead(Voltage_input);
+  
   // 計算按鈕按下的時間
-  if (analogRead(Voltage_input) > detect_vol && btr == 0) {
+  if (real_vol > detect_vol && btr == 0) {
     if (cad == 0) {
-      if (micros() - debounce_time >= 500) { // debounce 500us
-        start_time = millis(); // 紀錄起始時間
-        digitalWrite(Detect_vol_led, HIGH); // LED發亮
-        cad = 1;
-      }
-    }
-    else {
-      debounce_time = micros();
+      start_time = millis(); // 紀錄起始時間
+      digitalWrite(Detect_vol_led, HIGH); // LED發亮
+      cad = 1;
     }
   }
   else {
     if (cad == 1) {
-      if (micros() - debounce_time >= 500) {
-        finally_time = millis(); // 紀錄終止時間
-        continued_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
-        digitalWrite(Detect_vol_led, LOW); // LED熄滅
-        cad = 0;
+      finally_time = millis(); // 紀錄終止時間
+      continued_temp_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
+      
+      if (continued_temp_time >= 1) { // 大於1ms才會輸出計算值
+        continued_time = continued_temp_time;
       }
-    }
-    else {
-      debounce_time = micros();
+      digitalWrite(Detect_vol_led, LOW); // LED熄滅
+      cad = 0;
     }
   }
 
@@ -152,15 +147,15 @@ void loop() {
           lcd.print("Over");
         }
       }
-      
+
+      // 初始星號顯示
       lcd.setCursor(lcd_aryc_sign[counter2],lcd_aryr[counter2]);
       lcd.print("*");
 
       digitalWrite(Detect_vol_led, LOW); // LED熄滅
+      btr = 0; // 旋轉編碼器調控星號位置
       bc = 1;
     }
-    
-    btr = 0; // 旋轉編碼器調控星號位置
     
     lcd_sign(counter2); // 顯示螢幕星號位置
 
@@ -204,21 +199,18 @@ void loop() {
     }
   }
   else {
-    int real_vol;
-    
     if (bc == 1) {
       lcd.clear();
+      btr = 1; // 旋轉編碼器調控電壓閥值
+      lcd.print("Detection voltage"); //lcd.setCursor(0,0);
+      lcd.setCursor(0,2);
+      lcd.print("External voltage");
       bc = 0; // 功能返回時顯示初始化
     }
-
-    btr = 1; // 旋轉編碼器調控電壓閥值
 
     // 顯示外部電壓，並降低外部電壓顯示速度
     if (millis() - display_ext_time >= 100) { // 每100ms更新一次
       display_ext_time = millis();
-      real_vol = analogRead(Voltage_input);
-      lcd.setCursor(0,2);
-      lcd.print("External voltage");
       lcd.setCursor(0,3);
       lcd.print(real_vol*0.122);
       lcd.print("V  ");
@@ -230,8 +222,6 @@ void loop() {
     // 顯示閥值電壓
     if (millis() - display_det_time >= 50) { // 每50ms更新一次
       display_det_time = millis();
-      lcd.setCursor(0,0);
-      lcd.print("Detection voltage");
       lcd.setCursor(0,1);
       lcd.print(counter4);
       lcd.print("V ");
@@ -255,7 +245,7 @@ void bu() {
   // 按鈕狀態產生，切換調整電壓閥值與返回功能
   if (digitalRead(sw) == 0) {
     if (bt2 == 0) {
-      if (millis() - button_time >= 500) {
+      if (millis() - button_time >= 10) {
         if (bt1 >= 1) {
           bt1 = 0;
         }
@@ -269,7 +259,7 @@ void bu() {
   // 按鈕2狀態產生，切換鬆軔與緊軔標示
   else if (digitalRead(sw2) == 0) {
     if (bt4 == 0) {
-      if (millis() - button_time >= 500) {
+      if (millis() - button_time >= 10) {
         if (bt3 >= 1) {
           bt3 = 0;
         }
