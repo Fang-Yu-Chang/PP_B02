@@ -30,11 +30,14 @@ int lcd_aryc_time_sign[8] = {6,6,6,6,17,17,17,17}; // 顯示 ms 之位置用
 
 // 按鈕，電壓閥值切換
 unsigned long button_time = 0; // 按鈕持續按住的時間
-boolean bt1 = 0;
-boolean bt2 = 0;
+boolean st1 = 0; // Long push flag
+int st2 = 0; // Led2,3 switch flag
+int st3 = 0; // Short push flag
+int st4 = 0; // State optput
+int st5 = 0; // Save last state
 
 // 按鈕2，切換鬆軔、緊軔標示
-boolean bt3 = 0;
+int bt3 = 0;
 boolean bt4 = 0;
 
 // 按鈕3，清除螢幕
@@ -47,7 +50,7 @@ boolean bt6 = 0;
 boolean btr = 0; // 挑選要改變的變數
 
 // 清除螢幕的時機
-boolean bc = 0;
+int bc = 0;
 
 // ADC 讀取外部電壓
 int real_vol;
@@ -127,9 +130,11 @@ void loop() {
   bu();
 
   // 按鈕長按後切換調整電壓閥值與返回功能
-  if (bt1 == 0) {
-    // 初始化顯示
-    if (bc == 0) {
+  // st4 = 0; 正常模式自動前進至下一項
+  // st4 = 1; 鎖定模式手動切換至下一項
+  // st4 = 2; 偵測電壓閥值設定
+  if (st4 == 0) {
+    if (bc != 1) { // 初始化顯示
       lcd.clear();
       put_num(bt3); //標示鬆軔或緊軔標號
 
@@ -185,8 +190,8 @@ void loop() {
 
       lcd.setCursor(lcd_aryc_time[counter2],lcd_aryr[counter2]);
       lcd.print("      ");
-      lcd.setCursor(lcd_aryc_time[counter2],lcd_aryr[counter2]);
       
+      lcd.setCursor(lcd_aryc_time[counter2],lcd_aryr[counter2]);
       if (record_time[counter2] >= 10000) {
         lcd.print("Over");
       }
@@ -198,8 +203,21 @@ void loop() {
       continued_old_time = continued_time;
     }
   }
-  else {
-    if (bc == 1) {
+  else if (st4 == 1) {
+    if (bc != 2) {
+      lcd.clear();
+      put_num(bt3);
+
+      // 初始星號顯示
+      lcd.setCursor(lcd_aryc_sign[counter2],lcd_aryr[counter2]);
+      lcd.print("*");
+      btr = 0; // 旋轉編碼器調控星號位置
+      bc = 2;
+    }
+    
+  }
+  else if (st4 == 2) {
+    if (bc != 0) { // 初始化顯示
       lcd.clear();
       btr = 1; // 旋轉編碼器調控電壓閥值
       lcd.print("Detection voltage"); //lcd.setCursor(0,0);
@@ -242,17 +260,31 @@ void loop() {
 
 // 按鈕功能
 void bu() {
-  // 按鈕狀態產生，切換調整電壓閥值與返回功能
+  // 按鈕1狀態產生，切換調整電壓閥值與返回功能
   if (digitalRead(sw) == 0) {
-    if (bt2 == 0) {
-      if (millis() - button_time >= 10) {
-        if (bt1 >= 1) {
-          bt1 = 0;
+    if (millis() - button_time >= 1000) {
+      if (st1 == 0) {
+        if (st4 != 2) {
+          st4 = 2; // 直接輸出，電壓閥值切換功能
+          st3 = 2; // 狀態鎖定
         }
         else {
-          bt1 ++;
+          st4 = st5; // 回復至正常模式與鎖定模式
+          st2 = st5; // 恢復至前一次的狀態
+          st3 = 0; // 狀態解鎖
         }
-        bt2 = 1;
+        st1 = 1;
+      }
+    }
+    else {
+      if (st3 == 0) {
+        if (st2 <= 0) { // 狀態改變
+          st2 ++;
+        }
+        else {
+          st2 = 0;
+        }
+        st3 = 1;
       }
     }
   }
@@ -260,11 +292,21 @@ void bu() {
   else if (digitalRead(sw2) == 0) {
     if (bt4 == 0) {
       if (millis() - button_time >= 10) {
-        if (bt3 >= 1) {
-          bt3 = 0;
+        if (st4 == 0) {
+          if (bt3 >= 1) {
+            bt3 = 0;
+          }
+          else {
+            bt3 ++;
+          }
         }
-        else {
-          bt3 ++;
+        else if (st4 == 1) {
+          if (bt3 <= 2) {
+            bt3 = 3;
+          }
+          else {
+            bt3 --;
+          }
         }
         put_num(bt3);
         bt4 = 1;
@@ -323,10 +365,16 @@ void bu() {
   }
   else {
     button_time = millis();
-    bt2 = 0;
     bt4 = 0;
     bt5 = 0;
     bt6 = 0;
+
+    if (st3 == 1) { // 按鈕1放開後才產生功能切換
+      st4 = st2; // 輸出結果
+      st5 = st2; // 儲存狀態
+      st3 = 0;
+    }
+    st1 = 0;
   }
 }
 
@@ -350,6 +398,8 @@ void lcd_sign(int count2) {
 // LCD顯示標號
 // put_num(0); 緊軔
 // put_num(1); 鬆軔
+// put_num(2); 緊軔(鎖定模式)
+// put_num(3); 鬆軔(鎖定模式)
 void put_num(int pnum) {
   int i;
   for (i=0; i<=7; i++) {
@@ -358,8 +408,24 @@ void put_num(int pnum) {
     if (pnum <= 0) {
       lcd.print(i+1);
     }
-    else {
+    else if (pnum == 1) {
       lcd.print(lcd_aryc_num[i]);
+    }
+    else if (pnum == 2) {
+      if (i == 0) {
+        lcd.print("f");
+      }
+      else {
+        lcd.print(i+1);
+      }
+    }
+    else if (pnum == 3) {
+      if (i == 0) {
+        lcd.print("f");
+      }
+      else {
+        lcd.print(lcd_aryc_num[i]);
+      }
     }
     lcd.print("_");
   }
