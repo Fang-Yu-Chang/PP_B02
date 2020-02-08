@@ -17,7 +17,6 @@ int counter2_old = 0;       // 前一次輸出值
 float counter3 = 108.5;     // 閥值電壓計數器
 int counter4 = 108;         // 閥值電壓計數器，實際輸出值(電壓顯示)
 int detect_vol = 885;       // 閥值電壓計數器，實際輸出值(ADC顯示)
-int aState;                 // 定義 aState 為 int 類型變數
 int aLastState;             // 定義 aLastState 為 int 類型變數
 
 // LCD 顯示位置之座標
@@ -30,8 +29,16 @@ int lcd_aryc_time_sign[8] = {6,6,6,6,17,17,17,17}; // 顯示 ms 之位置用
 
 // 按鈕，電壓閥值切換
 unsigned long button_time = 0; // 按鈕持續按住的時間
+<<<<<<< Updated upstream
 boolean bt1 = 0;
 boolean bt2 = 0;
+=======
+boolean st1 = 0; // Long push flag
+boolean st2 = 0; // Switch flag
+int st3 = 0; // Short push flag
+int st4 = 0; // State optput
+int st5 = 0; // Save last state
+>>>>>>> Stashed changes
 
 // 按鈕2，切換鬆軔、緊軔標示
 boolean bt3 = 0;
@@ -46,23 +53,34 @@ boolean bt6 = 0;
 // 旋轉編碼器兩種變數設定
 boolean btr = 0; // 挑選要改變的變數
 
+<<<<<<< Updated upstream
 // 清除螢幕的時機
 boolean bc = 0;
+=======
+// 螢幕初始化的時機
+int bc = 0;
+>>>>>>> Stashed changes
 
 // ADC 讀取外部電壓
-int real_vol;
-boolean cad = 0;
 unsigned long start_time = 0;
 unsigned long finally_time = 0;
 unsigned long continued_time = 0;
 unsigned long continued_old_time = 0;
 unsigned long continued_temp_time = 0;
+<<<<<<< Updated upstream
+=======
+
+boolean cad = 0;
+
+// ADC debounce
+unsigned long debounce_time = 0;
+>>>>>>> Stashed changes
 
 // 紀錄過去的時間
 unsigned long record_time[8] = {0,0,0,0,0,0,0,0};
 
 // 讓螢幕從星號位置開始顯示
-int lda = 0;
+boolean lda = 0;
 
 // 最後一項停止紀錄時間
 boolean stop_last = 0;
@@ -100,6 +118,8 @@ void lcd_sign(int);
 
 //主程式運作區
 void loop() {
+  boolean force = 0;
+  int real_vol;
   real_vol = analogRead(Voltage_input);
   
   // 計算按鈕按下的時間
@@ -117,6 +137,22 @@ void loop() {
       
       if (continued_temp_time >= 1) { // 大於1ms才會輸出計算值
         continued_time = continued_temp_time;
+=======
+      if (micros() - debounce_time >= 500) {
+        finally_time = millis(); // 紀錄終止時間
+        
+        continued_temp_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
+        if (continued_temp_time >= 1) { // 大於1ms才會輸出計算值
+          continued_time = continued_temp_time;
+        }
+        
+        digitalWrite(Detect_vol_led, LOW); // LED熄滅
+        cad = 0;
+        force = 1; // 鎖定累加旗標
+      }
+      else {
+        debounce_time = micros();
+>>>>>>> Stashed changes
       }
       digitalWrite(Detect_vol_led, LOW); // LED熄滅
       cad = 0;
@@ -272,7 +308,7 @@ void bu() {
     }
   }
   // 按鈕3狀態產生，清除螢幕與標示回歸原點
-  else if (digitalRead(sw3) == 0) {
+  else if (digitalRead(sw3) == 0 && st4 != 2) {
     if (bt5 == 0) {
       if (millis() - button_time >= 1000) {
         int h;
@@ -367,6 +403,7 @@ void put_num(int pnum) {
 
 // 旋轉編碼器主程式
 void Rotary() {
+  int aState; // 定義 aState 為 int 類型變數
   aState = digitalRead(outputA);   // 將outputA的讀取值 設給 aState
 
   if (aState != aLastState && btr == 0) {  // 條件判斷，當aState 不等於 aLastState時發生
