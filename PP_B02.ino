@@ -132,6 +132,7 @@ void loop() {
   }
   else {
     if (cad == 1) {
+<<<<<<< Updated upstream
       finally_time = millis(); // 紀錄終止時間
       continued_temp_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
       
