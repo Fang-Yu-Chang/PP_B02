@@ -12,34 +12,34 @@
 
 // 旋轉編碼器
 float counter = 0.5;        // 顯示位置計數器
-int counter2 = 0;           // 顯示位置計數器，實際輸出值
-int counter2_old = 0;       // 前一次輸出值
+byte counter2 = 0;          // 顯示位置計數器，實際輸出值
+byte counter2_old = 0;      // 前一次輸出值
 float counter3 = 108.5;     // 閥值電壓計數器
-int counter4 = 108;         // 閥值電壓計數器，實際輸出值(電壓顯示)
+byte counter4 = 108;        // 閥值電壓計數器，實際輸出值(電壓顯示)
 int detect_vol = 885;       // 閥值電壓計數器，實際輸出值(ADC顯示)
-int aLastState;             // 定義 aLastState 為 int 類型變數
+boolean aLastState;         // 定義 aLastState 為 boolean 類型變數
 
 // LCD 顯示位置之座標
-int lcd_aryc[8] = {0,0,0,0,11,11,11,11};           // lcd column
-int lcd_aryr[8] = {0,1,2,3, 0, 1, 2, 3};           // lcd row
-int lcd_aryc_sign[8] = {8,8,8,8,19,19,19,19};      // lcd star sign, 顯示星號用
-int lcd_aryc_num[8] = {7,6,5,4,3,2,1,0};           // lcd顯示標號用
-int lcd_aryc_time[8] = {2,2,2,2,13,13,13,13};      // 顯示時間之位置用
-int lcd_aryc_time_sign[8] = {6,6,6,6,17,17,17,17}; // 顯示 ms 之位置用
+byte lcd_aryc[8] = {0,0,0,0,11,11,11,11};           // lcd column
+byte lcd_aryr[8] = {0,1,2,3, 0, 1, 2, 3};           // lcd row
+byte lcd_aryc_sign[8] = {8,8,8,8,19,19,19,19};      // lcd star sign, 顯示星號用
+byte lcd_aryc_num[8] = {7,6,5,4,3,2,1,0};           // lcd顯示標號用
+byte lcd_aryc_time[8] = {2,2,2,2,13,13,13,13};      // 顯示時間之位置用
+byte lcd_aryc_time_sign[8] = {6,6,6,6,17,17,17,17}; // 顯示 ms 之位置用
 
 // 按鈕，電壓閥值切換
 unsigned long button_time = 0; // 按鈕持續按住的時間
 boolean st1 = 0; // Long push flag
-int st2 = 0; // Switch flag
-int st3 = 0; // Short push flag
-int st4 = 0; // State optput
-int st5 = 0; // Save last state
+byte st2 = 0;    // Switch flag
+byte st3 = 0;    // Short push flag
+byte st4 = 0;    // State optput
+byte st5 = 0;    // Save last state
 
 // 按鈕2，切換鬆軔、緊軔標示
-int bt3 = 0;
+byte bt3 = 0;
 boolean bt4 = 0;
-int bt3_r = 0; // 正常模式紀錄
-int bt3_rf = 3; // 鎖定模式紀錄
+byte bt3_r = 0;  // 正常模式紀錄
+byte bt3_rf = 3; // 鎖定模式紀錄
 
 // 按鈕3，清除螢幕
 boolean bt5 = 0;
@@ -51,9 +51,10 @@ boolean bt6 = 0;
 boolean btr = 0; // 挑選要改變的變數
 
 // 清除螢幕的時機
-int bc = 0;
+byte bc = 0;
 
 // ADC 讀取外部電壓
+int real_vol;
 boolean cad = 0;
 unsigned long start_time = 0;
 unsigned long finally_time = 0;
@@ -78,13 +79,16 @@ boolean stop_last = 0;
 unsigned long display_ext_time = 0;
 unsigned long display_det_time = 0;
 
+// 電壓觸發模式(高壓觸發、低壓觸發)
+boolean dtv = 0;
+
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);  // 設定 LCD I2C 位址, PCF8574T, 0x27
 
 void setup() {
   lcd.begin(20, 4); // 初始化 LCD，一行 20 的字元，共 2 行
   lcd.backlight();  // 開啟背光
 
-  pinMode (sw,INPUT);  // 按鈕
+  pinMode (sw,INPUT);  // 按鈕1
   pinMode (sw2,INPUT); // 按鈕2
   pinMode (sw3,INPUT); // 按鈕3
   pinMode (sw4,INPUT); // 按鈕4
@@ -97,54 +101,50 @@ void setup() {
   attachInterrupt (0, Rotary, CHANGE); // 啟用中斷函式(中斷0,Rotary函式,CHANGE模式)
    
   aLastState = digitalRead(outputA); // 將初始outputA的讀取值 設給 aLastState
-} 
+
+  if (digitalRead(sw3) == 0) { // 進入低壓觸發模式
+    dtv = 1;
+    counter3 = 80.5;
+    counter4 = 80;
+    detect_vol = 655;
+
+    // 預先進入電壓閥值設定
+    st4 = 2;
+    bc = 1;
+  }
+
+  lcd.setCursor(0,3);
+  lcd.print("Default voltage");
+  lcd.setCursor(16,3);
+  lcd.print(counter4);
+  lcd.print("V");
+  
+  while (millis() <= 2500) {
+    lcd.setCursor(0,1);
+    if (dtv == 1) {
+      lcd.print("Detect low voltage");
+    }
+    else {
+      lcd.print("Detect high voltage");
+    }
+  }
+}
 
 // LCD顯示標號程式
-void put_num(int);
+void put_num(byte);
 
 // 顯示螢幕星號位置程式
-void lcd_sign(int);
+void lcd_sign(byte);
 
 // 螢幕輸出計算結果
-void lcd_display_time(int);
+void lcd_display_time(byte);
 
 //主程式運作區
 void loop() {
-  int real_vol;
   real_vol = analogRead(Voltage_input);
-  
+
   // 計算按鈕按下的時間
-  if (real_vol > detect_vol && btr == 0) {
-    if (cad == 0) {
-      if (micros() - debounce_time >= 500) {
-        start_time = millis(); // 紀錄起始時間
-        digitalWrite(Detect_vol_led, HIGH); // LED發亮
-        cad = 1;
-      }
-    }
-    else {
-      debounce_time = micros();
-    }
-  }
-  else {
-    if (cad == 1) {
-      if (micros() - debounce_time >= 500) {
-        finally_time = millis(); // 紀錄終止時間
-        continued_temp_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
-        
-        if (continued_temp_time >= 1) { // 大於1ms才會輸出計算值
-          continued_time = continued_temp_time;
-        }
-        
-        digitalWrite(Detect_vol_led, LOW); // LED熄滅
-        cad = 0;
-        force = 1; // 鎖定累加旗標
-      }
-    }
-    else {
-      debounce_time = micros();
-    }
-  }
+  detect_high_low_voltage();
 
   // 所有按鈕之功能產生
   bu();
@@ -157,10 +157,16 @@ void loop() {
     if (bc != 1) { // 初始化顯示
       initial_display();
       
-      if (bc == 2) { // 從鎖定累加功能轉過來時，從下一項開始顯示
-        lda = 1;
+      if (bc == 2) { // 當那一項已經有紀錄時間時，從下一項開始顯示
+        if (counter2 <= 6) {
+          if (record_time[counter2] != 0) {
+            lda = 1;
+          }
+        }
+        else {
+          stop_last = 1;
+        }
       }
-      
       bc = 1;
     }
     
@@ -171,7 +177,7 @@ void loop() {
         lda = 1;
       }
       else {
-        int j;
+        byte j;
         for (j=0; j<=1; j++) {
           if (counter <= 7.5) {
             counter = counter + 0.5;
@@ -211,8 +217,8 @@ void loop() {
   }
   else if (st4 == 2) {
     if (bc != 0) { // 初始化顯示
-      lcd.clear();
       btr = 1; // 旋轉編碼器調控電壓閥值
+      lcd.clear();
       lcd.print("Detection voltage"); //lcd.setCursor(0,0);
       lcd.setCursor(0,2);
       lcd.print("External voltage");
@@ -241,9 +247,24 @@ void loop() {
       lcd.print("   ");
     }
 
-    // 偵測外部電壓是否大於設定的閥值
+    // 電壓閥值設定LED顯示
+    detect_voltage_led();
+  }
+}
+
+// 電壓閥值設定LED顯示
+void detect_voltage_led() {
+  if (dtv == 0) { // 高壓觸發
     if (real_vol > detect_vol) {
-      digitalWrite(Detect_vol_led, HIGH); // LED發亮
+      digitalWrite(Detect_vol_led, HIGH); // LED點亮
+    }
+    else {
+      digitalWrite(Detect_vol_led, LOW); // LED熄滅
+    }
+  }
+  else { // 低壓觸發
+    if (real_vol < detect_vol) {
+      digitalWrite(Detect_vol_led, HIGH); // LED點亮
     }
     else {
       digitalWrite(Detect_vol_led, LOW); // LED熄滅
@@ -251,15 +272,48 @@ void loop() {
   }
 }
 
-// 螢幕輸出計算結果
-void lcd_display_time(int count2) {
-  lcd.setCursor(lcd_aryc_time[count2],lcd_aryr[count2]);
-  if (record_time[count2] >= 10000) {
-    lcd.print("Over");
-    lcd.setCursor(lcd_aryc_time_sign[count2],lcd_aryr[count2]);
-    lcd.print("  ");
+// 計算按鈕按下的時間(高壓觸發、低壓觸發)
+void detect_high_low_voltage() {
+  if ((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1) && btr == 0) {
+    if (cad == 0) {
+      if (micros() - debounce_time >= 500) {
+        start_time = millis(); // 紀錄起始時間
+        digitalWrite(Detect_vol_led, HIGH); // LED發亮
+        cad = 1;
+      }
+    }
+    else {
+      debounce_time = micros();
+    }
   }
   else {
+    if (cad == 1) {
+      if (micros() - debounce_time >= 500) {
+        finally_time = millis(); // 紀錄終止時間
+        continued_temp_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
+
+        if (continued_temp_time >= 1) { // 大於1ms才會輸出計算值
+          continued_time = continued_temp_time;
+        }
+
+        digitalWrite(Detect_vol_led, LOW); // LED熄滅
+        cad = 0;
+        force = 1; // 鎖定累加旗標
+      }
+    }
+    else {
+      debounce_time = micros();
+    }
+  }
+}
+
+// 螢幕輸出計算結果
+void lcd_display_time(byte count2) {
+  lcd.setCursor(lcd_aryc_time[count2],lcd_aryr[count2]);
+  if (record_time[count2] >= 10000) {
+    lcd.print("Over  ");
+  }
+  else if (record_time[count2] != 0) {
     lcd.print(record_time[count2]);
     lcd.setCursor(lcd_aryc_time_sign[count2],lcd_aryr[count2]);
     lcd.print("ms");
@@ -272,7 +326,7 @@ void initial_display() {
   put_num(bt3); //標示鬆軔或緊軔標號
 
   // 呼叫記憶顯示過去的時間記錄
-  int b;
+  byte b;
   for (b=0; b<=7; b++) {
     lcd.setCursor(lcd_aryc_time[b],lcd_aryr[b]);
 
@@ -290,7 +344,9 @@ void initial_display() {
   lcd.setCursor(lcd_aryc_sign[counter2],lcd_aryr[counter2]);
   lcd.print("*");
 
-  digitalWrite(Detect_vol_led, LOW); // LED熄滅
+  // 電壓閥值設定LED顯示
+  detect_voltage_led();
+  
   btr = 0; // 旋轉編碼器調控星號位置
 }
 
@@ -307,7 +363,7 @@ void bu() {
         else {
           st4 = st5; // 回復至正常模式與鎖定模式
           st2 = st5; // 恢復至前一次的狀態
-          st3 = 1; // 狀態解鎖
+          st3 = 1;   // 狀態解鎖
         }
         st1 = 1;
       }
@@ -355,7 +411,7 @@ void bu() {
   else if (digitalRead(sw3) == 0 && st4 != 2) {
     if (bt5 == 0) {
       if (millis() - button_time >= 1000) {
-        int h;
+        byte h;
         for (h=0; h<=7; h++) { // 清除所有的儲存值
           record_time[h] = 0;
         }
@@ -387,7 +443,7 @@ void bu() {
         }
 
         // 顯示位置往上移一格
-        int k;
+        byte k;
         for (k=0; k<=1; k++) {
           if (counter >= 1) {
             counter = counter - 0.5;
@@ -427,10 +483,10 @@ void bu() {
 }
 
 // 顯示螢幕星號位置
-void lcd_sign(int count2) {
-  int i;
+void lcd_sign(byte count2) {
   if (count2 != counter2_old) {
     // 先清除所有*號
+    byte i;
     for (i=0; i<=7; i++) {
       lcd.setCursor(lcd_aryc_sign[i],lcd_aryr[i]);
       lcd.print(" ");
@@ -448,8 +504,8 @@ void lcd_sign(int count2) {
 // put_num(1); 鬆軔
 // put_num(2); 鬆軔(鎖定模式)
 // put_num(3); 緊軔(鎖定模式)
-void put_num(int pnum) {
-  int i;
+void put_num(byte pnum) {
+  byte i;
   for (i=0; i<=7; i++) {
     lcd.setCursor(lcd_aryc[i],lcd_aryr[i]);
 
@@ -470,7 +526,7 @@ void put_num(int pnum) {
 
 // 旋轉編碼器主程式
 void Rotary() {
-  int aState; // 定義 aState 為 int 類型變數
+  boolean aState; // 定義 aState 為 boolean 類型變數
   aState = digitalRead(outputA);   // 將outputA的讀取值 設給 aState
 
   if (aState != aLastState && btr == 0) {  // 條件判斷，當aState 不等於 aLastState時發生
