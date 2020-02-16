@@ -252,29 +252,19 @@ void loop() {
   }
 }
 
-// 電壓閥值設定LED顯示
+// 電壓閥值設定LED顯示(高壓觸發、低壓觸發)
 void detect_voltage_led() {
-  if (dtv == 0) { // 高壓觸發
-    if (real_vol > detect_vol) {
-      digitalWrite(Detect_vol_led, HIGH); // LED點亮
-    }
-    else {
-      digitalWrite(Detect_vol_led, LOW); // LED熄滅
-    }
+  if ((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1)) {
+    digitalWrite(Detect_vol_led, HIGH); // LED點亮
   }
-  else { // 低壓觸發
-    if (real_vol < detect_vol) {
-      digitalWrite(Detect_vol_led, HIGH); // LED點亮
-    }
-    else {
-      digitalWrite(Detect_vol_led, LOW); // LED熄滅
-    }
+  else {
+    digitalWrite(Detect_vol_led, LOW); // LED熄滅
   }
 }
 
 // 計算按鈕按下的時間(高壓觸發、低壓觸發)
 void detect_high_low_voltage() {
-  if ((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1) && btr == 0) {
+  if (((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1)) && btr == 0) {
     if (cad == 0) {
       if (micros() - debounce_time >= 500) {
         start_time = millis(); // 紀錄起始時間
