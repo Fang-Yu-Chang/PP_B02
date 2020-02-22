@@ -57,11 +57,7 @@ byte bc = 0;
 int real_vol;
 boolean cad = 0;
 unsigned long start_time = 0;
-unsigned long finally_time = 0;
 unsigned long continued_time = 0;
-unsigned long continued_old_time = 0;
-unsigned long continued_temp_time = 0;
-boolean force = 0;
 
 // ADC debounce
 unsigned long debounce_time = 0;
@@ -77,7 +73,6 @@ boolean stop_last = 0;
 
 // 降低外部電壓顯示速度
 unsigned long display_ext_time = 0;
-unsigned long display_det_time = 0;
 
 // 電壓觸發模式(高壓觸發、低壓觸發)
 boolean dtv = 0;
@@ -143,9 +138,6 @@ void lcd_display_time(byte);
 void loop() {
   real_vol = analogRead(Voltage_input);
 
-  // 計算按鈕按下的時間
-  detect_high_low_voltage();
-
   // 所有按鈕之功能產生
   bu();
 
@@ -172,54 +164,86 @@ void loop() {
     
     lcd_sign(counter2); // 顯示螢幕星號位置
 
-    if (continued_time != continued_old_time) {
-      if (lda <= 0) { // 檢測星號位置使否透過旋鈕改變
-        lda = 1;
+    if (micros() - debounce_time >= 50) { // 當偵測時間小於5ms延遲50us後再次偵測
+      if (((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1)) && btr == 0) {
+        if (cad == 0) {
+          start_time = millis(); // 紀錄起始時間
+          cad = 1;
+        }
+        digitalWrite(Detect_vol_led, HIGH); // LED點亮
       }
       else {
-        byte j;
-        for (j=0; j<=1; j++) {
-          if (counter <= 7.5) {
-            counter = counter + 0.5;
-          }
-        }
-        counter2 = counter - 0.5;
-      }
+        continued_time = millis() - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
+        
+        if (cad == 1) {
+          if (continued_time >= 5) { // 大於5ms才會輸出計算值
+            if (lda <= 0) { // 檢測星號位置使否透過旋鈕改變
+              lda = 1;
+            }
+            else {
+              // 顯示位置往下移一格
+              byte j;
+              for (j=0; j<=1; j++) {
+                if (counter <= 7.5) {
+                  counter = counter + 0.5;
+                }
+              }
+              counter2 = counter - 0.5;
+            }
 
-      if (counter2 <= 6) {
-        record_time[counter2] = continued_time; // 儲存當前時間
-      }
-      else {
-        if (stop_last == 0) { // 第八項之後停止紀錄時間
-          record_time[counter2] = continued_time; // 儲存當前時間
-          stop_last = 1;
+            if (counter2 <= 6) {
+              record_time[counter2] = continued_time; // 儲存當前時間
+            }
+            else {
+              if (stop_last == 0) { // 第八項之後停止紀錄時間
+                record_time[counter2] = continued_time; // 儲存當前時間
+                stop_last = 1;
+              }
+            }
+            lcd_display_time(counter2); // lcd 顯示計算結果
+          }
+          else {
+            debounce_time = micros(); // debounce_time 重新計時，延遲50us再次計算時間
+          }
+          cad = 0;
         }
+        digitalWrite(Detect_vol_led, LOW); // LED熄滅
       }
-      lcd_display_time(counter2);
-      continued_old_time = continued_time;
     }
   }
   else if (st4 == 1) { // 鎖定累加模式
     if (bc != 2) {
       initial_display();
-      continued_old_time = 0;
-      continued_time = 0;
       bc = 2;
     }
+    
     lcd_sign(counter2); // 顯示螢幕星號位置
 
-    if (force == 1) {
-      record_time[counter2] = record_time[counter2] + continued_time; // 時間累加
-      continued_time = 0; // 避免重複累加
-      lcd_display_time(counter2);
-      force = 0;
+    if (((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1)) && btr == 0) {
+      if (cad == 0) {
+        start_time = millis(); // 紀錄起始時間
+        cad = 1;
+      }
+      digitalWrite(Detect_vol_led, HIGH); // LED點亮
+    }
+    else {
+      continued_time = millis() - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
+      
+      if (cad == 1) {
+        if (continued_time >= 5) { // 大於5ms才會輸出計算值
+          record_time[counter2] = record_time[counter2] + continued_time; // 時間累加
+          lcd_display_time(counter2);
+        }
+        cad = 0;
+      }
+      digitalWrite(Detect_vol_led, LOW); // LED熄滅
     }
   }
   else if (st4 == 2) {
     if (bc != 0) { // 初始化顯示
       btr = 1; // 旋轉編碼器調控電壓閥值
       lcd.clear();
-      lcd.print("Detection voltage"); //lcd.setCursor(0,0);
+      lcd.print("Detection voltage"); // lcd.setCursor(0,0);
       lcd.setCursor(0,2);
       lcd.print("External voltage");
       bc = 0; // 功能返回時顯示初始化
@@ -237,15 +261,12 @@ void loop() {
     }
 
     // 顯示閥值電壓
-    if (millis() - display_det_time >= 50) { // 每50ms更新一次
-      display_det_time = millis();
-      lcd.setCursor(0,1);
-      lcd.print(counter4);
-      lcd.print("V ");
-      lcd.setCursor(12,1);
-      lcd.print(detect_vol);
-      lcd.print("   ");
-    }
+    lcd.setCursor(0,1);
+    lcd.print(counter4);
+    lcd.print("V ");
+    lcd.setCursor(12,1);
+    lcd.print(detect_vol);
+    lcd.print("   ");
 
     // 電壓閥值設定LED顯示
     detect_voltage_led();
@@ -259,41 +280,6 @@ void detect_voltage_led() {
   }
   else {
     digitalWrite(Detect_vol_led, LOW); // LED熄滅
-  }
-}
-
-// 計算按鈕按下的時間(高壓觸發、低壓觸發)
-void detect_high_low_voltage() {
-  if (((real_vol > detect_vol && dtv == 0) || (real_vol < detect_vol && dtv == 1)) && btr == 0) {
-    if (cad == 0) {
-      if (micros() - debounce_time >= 500) {
-        start_time = millis(); // 紀錄起始時間
-        digitalWrite(Detect_vol_led, HIGH); // LED發亮
-        cad = 1;
-      }
-    }
-    else {
-      debounce_time = micros();
-    }
-  }
-  else {
-    if (cad == 1) {
-      if (micros() - debounce_time >= 500) {
-        finally_time = millis(); // 紀錄終止時間
-        continued_temp_time = finally_time - start_time; // 根據起始時間與終止時間計算時間差，得到經過時間
-
-        if (continued_temp_time >= 1) { // 大於1ms才會輸出計算值
-          continued_time = continued_temp_time;
-        }
-
-        digitalWrite(Detect_vol_led, LOW); // LED熄滅
-        cad = 0;
-        force = 1; // 鎖定累加旗標
-      }
-    }
-    else {
-      debounce_time = micros();
-    }
   }
 }
 
@@ -419,7 +405,7 @@ void bu() {
   // 按鈕4，合併當前秒數至前項
   else if (digitalRead(sw4) == 0 && st4 == 0) {
     if (bt6 == 0) {
-      if (millis() - button_time >= 800) {
+      if (millis() - button_time >= 600) {
         
         if (counter2 >= 1) {
           // 覆蓋當前顯示秒數為空白
@@ -428,8 +414,6 @@ void bu() {
 
           record_time[counter2 - 1] = record_time[counter2] + record_time[counter2 - 1]; // 回加秒數至前一項
           record_time[counter2] = 0; // 清除過去時間值
-          continued_time = record_time[counter2 - 1]; // 將累加的時間儲存當成目前的時間
-          continued_old_time = 0; // 強制螢幕更新，令過去值為0
         }
 
         // 顯示位置往上移一格
@@ -441,7 +425,9 @@ void bu() {
         }
         counter2 = counter - 0.5;
         
-        lda = 0; // 從當下切換過去的那一行開始顯示，不要直接跳下一行
+        lcd_display_time(counter2); // lcd 顯示計算結果
+        
+        lda = 1; // 直接跳下一行顯示
         stop_last = 0; // 重新允許紀錄至最後一項
         bt6 = 1;
       }
